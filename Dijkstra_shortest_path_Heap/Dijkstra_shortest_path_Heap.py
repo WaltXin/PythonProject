@@ -3,7 +3,7 @@ from collections import defaultdict
 def push(heap, item):
     """Push item onto heap, maintaining the heap invariant."""
     heap.append(item)
-    shiftdown(heap, 0, len(heap)-1)
+    shiftups(heap, 0, len(heap)-1)
 
 def pop(heap):
     """Pop the smallest item off the heap, maintaining the heap invariant."""
@@ -11,14 +11,14 @@ def pop(heap):
     if heap:
         returnitem = heap[0]
         heap[0] = lastelt
-        shiftup(heap, 0)
+        shiftdown(heap, 0)
         return returnitem
     return lastelt
 
 # 'heap' is a heap at all indices >= startpos, except possibly for pos.  pos
 # is the index of a leaf with a possibly out-of-order value.  Restore the
 # heap invariant.
-def shiftdown(heap, startpos, pos):
+def shiftups(heap, startpos, pos):
     newitem = heap[pos]
     # Follow the path to the root, moving parents down until finding a place
     # newitem fits.
@@ -32,7 +32,7 @@ def shiftdown(heap, startpos, pos):
         break
     heap[pos] = newitem
 
-def shiftup(heap, pos):
+def shiftdown(heap, pos):
     endpos = len(heap)
     startpos = pos
     newitem = heap[pos]
@@ -50,7 +50,7 @@ def shiftup(heap, pos):
     # The leaf at pos is empty now.  Put newitem there, and bubble it up
     # to its final resting place (by sifting its parents down).
     heap[pos] = newitem
-    shiftdown(heap, startpos, pos)
+    shiftups(heap, startpos, pos)
 
 
 def dijkstra(edges, f, t):
