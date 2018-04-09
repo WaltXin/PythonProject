@@ -1,9 +1,9 @@
 import mechanicalsoup
 
 URL = "https://twitter.com/login"
-LOGIN = "xiongxinwei6@gmail.com"
-PASSWORD = "xxw33242"
-TWITTER_NAME = "xinweixiong" # without @
+LOGIN = "@gmail.com"
+PASSWORD = ""
+TWITTER_NAME = "" # without @
 
 # Create a browser object
 browser = mechanicalsoup.Browser()
