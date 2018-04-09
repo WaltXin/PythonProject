@@ -19,7 +19,7 @@ ga_enabled = algo == 'ga' or algo == 'ga-bfoa' or algo is None
 
 def main():
     problems = orparser.parse(problem_file)
-    problem = next(x for x in problems if x.optimum > 0)
+    problem = problems[0]
 
     work_unit = create_work_unit(problem)
     result = mkp_result.Result()
