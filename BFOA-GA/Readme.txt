@@ -1,0 +1,1 @@
+in Run-> Run Configurations(or Edit Configurations) set up bfoa to run bfoa. Set up ga to run ga. Set up ga-bfoa to run ga-bfoa combine function
