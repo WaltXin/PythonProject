@@ -1,12 +1,11 @@
 import numpy as np
 
-worst_profit = -1
-
 
 class Genetic(object):
-    def __init__(self, evaluate, create_initial, is_solution_valid, num_agents, num_dimensions, num_iterations,
+    def __init__(self, compute_profit, create_initial, is_solution_valid, num_agents, num_dimensions, num_iterations,
                  mutate_probability=0.3, offsprings_proportion=0.5):
-        self.evaluate = evaluate
+
+        self.compute_profit = compute_profit
         self.create_initial = create_initial
         self.is_solution_valid = is_solution_valid
         self.num_agents = num_agents
@@ -17,31 +16,19 @@ class Genetic(object):
         self.offsprings_proportion = offsprings_proportion
 
         self.num_offspring_pairs = int(offsprings_proportion * num_agents) >> 1
-        self.agents = np.array([create_initial() for _ in range(num_agents)])
-        self.profits = self.evaluate_agents(self.agents)
 
-        self.iteration_best = []
-        self.iteration_best_profit = worst_profit
-        self.global_best = []
-        self.global_best_profit = worst_profit
-
-        self.compute_best()
+        self.solutions = None
+        self.profits = None
 
         self.agent_indices = np.arange(self.num_agents)
 
-    def evaluate_agents(self, agents):
-        return np.array([self.evaluate(x) for x in agents])
+    def compute_profits(self, solutions):
+        return np.array([self.compute_profit(x) for x in solutions])
 
-    def compute_best(self):
-        best_agent = self.profits.argmax()
-        self.iteration_best = self.agents[best_agent]
-        self.iteration_best_profit = self.profits[best_agent]
+    def iterate(self, iteration, solutions, profits):
+        self.solutions = solutions
+        self.profits = profits
 
-        if self.iteration_best_profit > self.global_best_profit:
-            self.global_best = self.iteration_best
-            self.global_best_profit = self.iteration_best_profit
-
-    def iterate(self, iteration):
         probabilities = self.compute_probabilities()
         offsprings = np.zeros((self.num_offspring_pairs * 2, self.num_dimensions), dtype=int)
 
@@ -56,7 +43,7 @@ class Genetic(object):
 
         self.replace_worst(offsprings)
 
-        self.compute_best()
+        return self.solutions, self.profits
 
     def compute_probabilities(self):
         total_profits = float(self.profits.sum())
@@ -64,7 +51,7 @@ class Genetic(object):
 
     def get_parents(self, probabilities):
         i, j = np.random.choice(self.agent_indices, size=2, replace=False, p=probabilities)
-        return self.agents[i], self.agents[j]
+        return self.solutions[i], self.solutions[j]
 
     def get_offspring_pair(self, parents):
         a = np.zeros(self.num_dimensions, dtype=int)
@@ -91,14 +78,14 @@ class Genetic(object):
         solution[i] = 1 - solution[i]
 
     def replace_worst(self, offsprings):
-        agents = np.concatenate([self.agents, offsprings])
+        solutions = np.concatenate([self.solutions, offsprings])
 
-        offspring_profits = self.evaluate_agents(offsprings)
+        offspring_profits = self.compute_profits(offsprings)
         profits = np.concatenate([self.profits, offspring_profits])
 
         profits_with_index = [(x, i) for i, x in enumerate(profits)]
         profits_with_index.sort(reverse=True)
         profits_with_index = profits_with_index[:self.num_agents]
 
+        self.solutions = np.array([solutions[i] for x, i in profits_with_index])
         self.profits = np.array([profits[i] for x, i in profits_with_index])
-        self.agents = np.array([agents[i] for x, i in profits_with_index])

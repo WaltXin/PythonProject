@@ -1,97 +1,98 @@
 import numpy as np
-from random import random
 
-worst_profit = -1
+import mkp_agent
 
 
 class BacterialForaging(object):
     def __init__(self, evaluate, create_initial, is_solution_valid, num_agents, num_dimensions, num_iterations,
-                 num_steps=2, swim_len=12, step_size=0.2, eliminate_probability=1.15):
+                 elim_disp_steps=1, repro_steps=2, chem_steps=20, swim_len=4, step_size=0.05,
+                 d_attr=0.1, w_attr=0.2, h_rep=0.1, w_rep=10, p_eliminate=0.25):
 
-        self.evaluate = evaluate
+        self.compute_profit = evaluate
         self.create_initial = create_initial
         self.is_solution_valid = is_solution_valid
         self.num_agents = num_agents
         self.num_dimensions = num_dimensions
         self.num_iterations = num_iterations
-        self.num_steps = num_steps
+        self.elim_disp_steps = elim_disp_steps
+        self.repro_steps = repro_steps
+        self.chem_steps = chem_steps
         self.swim_len = swim_len
         self.step_size = step_size
-        self.eliminate_probability = eliminate_probability
+        self.d_attr = d_attr
+        self.w_attr = w_attr
+        self.h_rep = h_rep
+        self.w_rep = w_rep
+        self.p_eliminate = p_eliminate
 
-        self.agents = [create_initial() for _ in range(num_agents)]
-        self.profits = self.evaluate_agents(self.agents)
+        self.agents = None
 
-        self.iteration_best = []
-        self.iteration_best_profit = worst_profit
-        self.global_best = []
-        self.global_best_profit = worst_profit
+    def create_agent(self, agents, solution):
+        agent = mkp_agent.Agent()
+        agent.solution = solution
+        agent.profit = self.compute_profit(solution)
+        agent.interaction = self.compute_interaction(agents, solution)
+        agent.fitness = agent.profit + agent.interaction
+        return agent
 
-        self.compute_best()
+    def compute_interaction(self, agents, solution):
+        attract = self.compute_interaction_with_parameters(agents, solution, self.d_attr, -self.w_attr)
+        repel = self.compute_interaction_with_parameters(agents, solution, -self.h_rep, -self.w_rep)
+        return attract + repel
 
-        self.step_list = [step_size - step_size * 0.9 * i / num_iterations for i in range(num_iterations)]
-        self.eliminate_list = [eliminate_probability - eliminate_probability * 0.5 * i / num_iterations
-                               for i in range(num_iterations)]
+    @staticmethod
+    def compute_interaction_with_parameters(agents, solution, d, w):
+        return d * np.sum([np.exp(w * norm_sq(solution - other.solution)) for other in agents])
 
-        self.previous_profit = self.profits[::1]
+    def iterate(self, iteration, solutions, profits):
+        self.agents = [mkp_agent.Agent.with_solution(solution) for solution in solutions]
+        self.agents = [self.create_agent(self.agents, agent.solution) for agent in self.agents]
 
-    def evaluate_agents(self, agents):
-        return np.array([self.evaluate(x) for x in agents])
+        for elim_disp in range(self.elim_disp_steps):
+            for repro in range(self.repro_steps):
+                for chem in range(self.chem_steps):
+                    self.agents = [self.chemotaxis(agent) for agent in self.agents]
 
-    def compute_best(self):
-        best_agent = self.profits.argmax()
-        self.iteration_best = self.agents[best_agent]
-        self.iteration_best_profit = self.profits[best_agent]
+                # reproduction
+                self.agents.sort(key=lambda agent: agent.nutrient, reverse=True)
+                self.agents = self.agents[:self.num_agents >> 1] * 2
 
-        if self.iteration_best_profit > self.global_best_profit:
-            self.global_best = self.iteration_best
-            self.global_best_profit = self.iteration_best_profit
+            # elimination-dispersal
+            for agent_index, agent in enumerate(self.agents):
+                if np.random.rand() <= self.p_eliminate:
+                    self.agents[agent_index] = self.create_agent(self.agents, self.create_initial())
 
-    def iterate(self, iteration):
-        chem_profits = [self.profits[::1]]
+        solutions = np.array([agent.solution for agent in self.agents])
+        profits = np.array([agent.profit for agent in self.agents])
+        return solutions, profits
 
-        for j in range(self.num_steps):
-            for i in range(self.num_agents):
-                dell = np.random.uniform(-1, 1, self.num_dimensions)
-                delta = self.step_list[iteration] * np.linalg.norm(dell) * dell
-                self.agents[i] = to_0_1(self.agents[i] + delta)
+    def chemotaxis(self, agent):
+        nutrient = agent.fitness
 
-                for m in range(self.swim_len):
-                    if self.evaluate(self.agents[i]) > self.previous_profit[i]:
-                        self.previous_profit[i] = self.profits[i]
-                        self.agents[i] = to_0_1(self.agents[i] + delta)
-                    else:
-                        dell = np.random.uniform(-1, 1, self.num_dimensions)
-                        delta = self.step_list[iteration] * np.linalg.norm(dell) * dell
-                        self.agents[i] = to_0_1(self.agents[i] + delta)
+        for m in range(self.swim_len):
+            new_solution = self.tumble(agent.solution)
+            new_agent = self.create_agent(self.agents, new_solution)
+            if new_agent.fitness < agent.fitness:
+                break
 
-            self.profits = self.evaluate_agents(self.agents)
-            chem_profits += [self.profits]
+            agent = new_agent
+            nutrient += agent.fitness
 
-        chem_profits = np.array(chem_profits)
+        agent.nutrient = nutrient
+        return agent
 
-        health = [(sum(chem_profits[:, i]), i) for i in range(self.num_agents)]
-        health.sort(reverse=True)
-        alive_agents = []
-        for i in health:
-            alive_agents += [list(self.agents[i[1]])]
+    def tumble(self, solution):
+        new_solution = np.zeros(solution.shape, dtype=solution.dtype)
+        for i in range(self.num_dimensions):
+            if np.random.rand() <= self.step_size:
+                new_solution[i] = 1 - solution[i]
+            else:
+                new_solution[i] = solution[i]
+        return new_solution
 
-        if self.num_agents & 1:
-            alive_agents = 2 * alive_agents[:self.num_agents // 2]
-            self.agents = np.array(alive_agents)
-        else:
-            alive_agents = 2 * alive_agents[:self.num_agents // 2] + [alive_agents[self.num_agents // 2]]
-            self.agents = np.array(alive_agents)
 
-        if iteration < self.num_iterations - 2:
-            for i in range(self.num_agents):
-                r = random()
-                if r >= self.eliminate_list[iteration]:
-                    self.agents[i] = self.create_initial()
-
-        self.profits = self.evaluate_agents(self.agents)
-
-        self.compute_best()
+def norm_sq(x):
+    return np.dot(x, x)
 
 
 def to_0_1(v):

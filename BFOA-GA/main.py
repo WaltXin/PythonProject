@@ -1,54 +1,57 @@
 import numpy as np
+import sys
 
 import bacterial_foraging
 import genetic
+import mkp_result
+import mkp_work_unit
 import orparser
 
-problems = orparser.parse('orlib/mknap_sikessle.txt')
-p = next(x for x in problems if x.optimum > 0)
+num_iterations = 100
+num_ga_agents = 500
+num_bfoa_agents = 30
+problem_file = 'orlib/mknap_sikessle.txt'
 
-low = 0
-high = 2
-num_dimensions = p.num_items
-num_iterations = 200
-worst_profit = -1
-
-
-def evaluate(solution):
-    for limit in range(p.num_limits):
-        weights = p.weights[limit]
-        total_weight = np.sum(weights * solution)
-
-        if total_weight > p.limits[limit]:
-            return worst_profit
-
-    return np.sum(p.profits * solution)
+algo = sys.argv[1] if len(sys.argv) > 1 else None
+bfoa_enabled = algo == 'bfoa' or algo == 'ga-bfoa' or algo is None
+ga_enabled = algo == 'ga' or algo == 'ga-bfoa' or algo is None
 
 
-def create_initial():
-    solution = np.random.randint(low, high, num_dimensions)
-    make_solution_valid(solution)
-    return solution
+def main():
+    problems = orparser.parse(problem_file)
+    problem = next(x for x in problems if x.optimum > 0)
+
+    work_unit = create_work_unit(problem)
+    result = mkp_result.Result()
+
+    bfoa = bacterial_foraging.BacterialForaging(
+        problem.compute_profit, problem.create_initial, problem.is_solution_valid,
+        num_agents=num_bfoa_agents, num_dimensions=problem.num_items, num_iterations=num_iterations)
+    ga = genetic.Genetic(
+        problem.compute_profit, problem.create_initial, problem.is_solution_valid,
+        num_agents=num_ga_agents, num_dimensions=problem.num_items, num_iterations=num_iterations)
+
+    for iteration in range(num_iterations):
+        if ga_enabled:
+            output = ga.iterate(iteration, *work_unit.get_best(num_ga_agents))
+            work_unit.replace_worst(*output)
+
+        if bfoa_enabled:
+            output = bfoa.iterate(iteration, *work_unit.get_best(num_bfoa_agents))
+            work_unit.replace_worst(*output)
+
+        result.compute_best(work_unit.solutions, work_unit.profits)
+        print(result.best_profit)
+
+    print('result : {}'.format(result.best_profit))
+    print('optimum: {}'.format(problem.optimum))
 
 
-def is_solution_valid(solution):
-    return evaluate(solution) != worst_profit
+def create_work_unit(problem):
+    num_agents = max(num_ga_agents, num_bfoa_agents)
+    solutions = np.array([problem.create_initial() for _ in range(num_agents)])
+    profits = np.array([problem.compute_profit(solution) for solution in solutions])
+    return mkp_work_unit.WorkUnit(solutions, profits)
 
 
-def make_solution_valid(solution):
-    while not is_solution_valid(solution):
-        solution[np.random.randint(0, len(solution) - 1)] = 0
-
-
-bfoa = bacterial_foraging.BacterialForaging(evaluate, create_initial, is_solution_valid,
-                                            num_agents=40, num_dimensions=num_dimensions, num_iterations=num_iterations)
-ga = genetic.Genetic(evaluate, create_initial, is_solution_valid,
-                     num_agents=1000, num_dimensions=num_dimensions, num_iterations=num_iterations)
-print("BFOA    GA")
-for iteration in range(num_iterations):
-    bfoa.iterate(iteration)
-    ga.iterate(iteration)
-    print(bfoa.global_best_profit, ga.global_best_profit)
-
-print(max(bfoa.global_best_profit, ga.global_best_profit))
-print(p.optimum)
+main()

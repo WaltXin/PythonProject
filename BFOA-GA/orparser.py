@@ -1,6 +1,8 @@
 import numpy as np
 import scanner
 
+import mkp_result
+
 
 class Problem(object):
     def __init__(self):
@@ -10,6 +12,28 @@ class Problem(object):
         self.profits = []
         self.weights = []
         self.limits = []
+
+    def create_initial(self):
+        solution = np.random.randint(0, 2, self.num_items)
+        self.make_solution_valid(solution)
+        return solution
+
+    def compute_profit(self, solution):
+        for limit in range(self.num_limits):
+            weights = self.weights[limit]
+            total_weight = np.sum(weights * solution)
+
+            if total_weight > self.limits[limit]:
+                return mkp_result.worst_profit
+
+        return np.sum(self.profits * solution)
+
+    def is_solution_valid(self, solution):
+        return self.compute_profit(solution) != mkp_result.worst_profit
+
+    def make_solution_valid(self, solution):
+        while not self.is_solution_valid(solution):
+            solution[np.random.randint(0, len(solution) - 1)] = 0
 
 
 def parse(filename):
